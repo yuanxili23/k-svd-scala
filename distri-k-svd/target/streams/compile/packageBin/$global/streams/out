@@ -1,0 +1,35 @@
+[0m[[0minfo[0m] [0mPackaging /home/labuser/Downloads/distri-k-svd/target/scala-2.10/ksvd_2.10-1.0.jar ...[0m
+[0m[[0mdebug[0m] [0mInput file mappings:[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$main$1.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$main$1.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$9.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$9.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$10.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$10.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$main$2.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$main$2.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$5.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$5.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$6.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$6.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$rowToTransposedTriplet$1.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$rowToTransposedTriplet$1.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$buildRow$1.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$buildRow$1.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$4.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$4.class[0m
+[0m[[0mdebug[0m] [0m	ksvd.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$8.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$8.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$3.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$3.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$1.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$1.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$7.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$7.class[0m
+[0m[[0mdebug[0m] [0m	ksvd$$anonfun$2.class[0m
+[0m[[0mdebug[0m] [0m	  /home/labuser/Downloads/distri-k-svd/target/scala-2.10/classes/ksvd$$anonfun$2.class[0m
+[0m[[0minfo[0m] [0mDone packaging.[0m
