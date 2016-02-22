@@ -7,6 +7,8 @@ import org.apache.spark.mllib.linalg.SingularValueDecomposition
 import java.util.Arrays
 import breeze.linalg.{axpy => brzAxpy, inv, svd => brzSvd, DenseMatrix => BDM, DenseVector => BDV,
   MatrixSingularException, SparseVector => BSV}
+
+import breeze.linalg.pinv
 import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 import com.github.fommil.netlib.ARPACK
 import org.netlib.util.{doubleW, intW}
@@ -16,12 +18,12 @@ import breeze.numerics.{sqrt => brzSqrt}
 
 object ksvd{
 
-	// def matrixToRDD(m: Matrix): RDD[Vector] = {
- //   val columns = m.toArray.grouped(m.numRows)
- //   val rows = columns.toSeq.transpose // Skip this if you want a column-major RDD.
- //   val vectors = rows.map(row => new DenseVector(row.toArray))
- //   sc.parallelize(vectors)
- //  }
+	def matrixToRDD(sc:SparkContext, m: Matrix): RDD[Vector] = {
+   val columns = m.toArray.grouped(m.numRows)
+   val rows = columns.toSeq.transpose // Skip this if you want a column-major RDD.
+   val vectors = rows.map(row => new DenseVector(row.toArray))
+   sc.parallelize(vectors)
+  }
 
 
 	def symmetricEigs(
@@ -149,6 +151,49 @@ object ksvd{
 
     (Q,R)
   }
+
+
+
+  def RowMatrixtoBreeze(D:RowMatrix): BDM[Double] = {
+    val m = D.numRows().toInt
+    val n = D.numCols().toInt
+    val mat = BDM.zeros[Double](m, n)
+    var i = 0
+    D.rows.collect().zipWithIndex.foreach { v =>
+      mat(v._2,::):=toBreezeV(v._1).t
+    }
+    mat
+  }
+
+  def SparseCoding_OMP(rows: RDD[Vector], D: BDM[Double], L:Int): (Matrix, Matrix) ={
+    var m=D.rows
+    var n=D.cols
+    var matrix=new RowMatrix(rows)
+    var Y=RowMatrixtoBreeze(matrix)
+    var newX=BDM.zeros[Double](n,n)
+    var residue=Y
+
+    for(i<- 0 until L){
+      var dot_p=D.t*residue
+      for(i<-0 until n){
+         for(j<-0 until n){
+            dot_p(i,j)=Math.abs(dot_p(i,j))
+         }
+      }
+      var newD=BDM.zeros[Double](m,n)
+      var index=dot_p.argmax
+      var j=0;
+      index.productIterator.map(_.asInstanceOf[Int]).foreach{i=>
+        newD(::,j):=D(::,i)
+        j=j+1
+      }
+      newX=pinv(newD)*Y
+      residue=Y-newD*newX
+    }
+
+    (fromBreeze(D),fromBreeze(newX))
+  }
+
 
   def spr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
     val n = v.size
@@ -361,9 +406,10 @@ object ksvd{
   		}
   	var G=E.map{case (index, v)=> (index, toBreeze(computeGramian(v)))}
   	var svd=G.map{case (i, grammian) => (i, computeSVD(D, grammian,1))}.map{case (i, (sigma, ufull))=> 
-        (i, (sigma,ufull(::,1).toDenseMatrix)) }
+        (i, (sigma,ufull(::,0).toDenseMatrix)) }
     svd
   }
+
 
   def updateX(svd:RDD[(Long, (Double, BDM[Double]))], X:Matrix):Matrix={
      var cols=X.numCols
@@ -374,14 +420,32 @@ object ksvd{
 
 
 
-  def computeU(A:RowMatrix, v:RDD[(Long,(Double,BDM[Double]))]):RowMatrix={
-    var u_divideby_sigma=v.sortByKey().map(x=> x._2._2.toDenseMatrix/x._2._1).reduce((x,y)=>BDM.vertcat(x,y)) 
-    var matrix_u=fromBreeze(u_divideby_sigma.t)
-    var updatedD=A.multiply(matrix_u)
-    updatedD
+  def computeU(sc:SparkContext, E:RDD[(Long,Matrix)], vd:RDD[(Long,(Double,BDM[Double]))]):BDM[Double]={
+    var E_v=E.join(vd).map{case (index, (e,(sigma, v))) =>
+      (index, toBreeze(e), v) 
+      }.map{case (index, e, v)=> (index,e*v.t)}.sortByKey().map(_._2)
+    var D=E_v.reduce((x,y)=>BDM.horzcat(x,y))
+    D
   }
 
   
+  def computeErr(D:RowMatrix, X: Matrix):RDD[(Long,Matrix)]={
+    var DT=transposeRowMatrix(D)
+
+    var Drow=D.numRows()
+    var Dcol=D.numCols()
+    // var Dcol=getNthcols(DwithIndex)
+    var Xarray=DT.rows.zipWithIndex.map{case (rows, rowIndex)=>
+        (rowIndex,X.toArray.zipWithIndex.filter{case (value, index)=>
+          index%2==rowIndex
+        }.map(_._1))
+      }  
+
+    var E=DT.rows.zipWithIndex.map{case (rows, rowIndex)=> (rowIndex, rows.toArray)}.join(Xarray).map{case (index, (x,y))=>
+        (index, Matrices.dense(Drow.toInt,Dcol.toInt,(BDV(x)*BDV(y).t).toArray))
+      }.sortByKey()
+    E
+  }
 
 
 
@@ -391,19 +455,26 @@ object ksvd{
     val sc=new SparkContext(conf)
     val distFile=sc.textFile("/Users/Yuanxi/Desktop/distri-k-svd/signal.txt").map(line => readFile(line))
     var A=new RowMatrix(distFile)
-    var qrResult=SparseCoding(distFile)
-    var D=qrResult._1
-    var X=qrResult._2
 
+    var n=A.rows.count.toInt
+    var k=2 // D is  n*k
+    var D=BDM.rand(n,k)
+    //var qrResult=SparseCoding(distFile)
+    var L=2
     var t=args(0).toInt
-
-
-    var vd=computeSigmaAndV(D,X)
+    //L: number of non-zero entries in output
 
     for(i<- 0 until t){
-      D=computeU(A, vd)
+      var qrResult=SparseCoding_OMP(distFile,D,L)
+
+      var Drowmatrix=new RowMatrix(matrixToRDD(sc, qrResult._1))
+      var X=qrResult._2
+
+      var vd=computeSigmaAndV(Drowmatrix,X)
+
+      var E=computeErr(Drowmatrix,X)
+      D=computeU(sc, E, vd)
       X=updateX(vd,X)
-      vd=computeSigmaAndV(D,X)
     }
     // var res=DicUpdate(D,X)
     // var DT=transposeRowMatrix(D)
