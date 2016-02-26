@@ -8,13 +8,12 @@ import java.util.Arrays
 import breeze.linalg.{axpy => brzAxpy, inv, svd => brzSvd, DenseMatrix => BDM, DenseVector => BDV,
   MatrixSingularException, SparseVector => BSV}
 
-import breeze.linalg.pinv
+import breeze.linalg.{pinv, norm}
 import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 import com.github.fommil.netlib.ARPACK
 import org.netlib.util.{doubleW, intW}
 import breeze.numerics.{sqrt => brzSqrt}
-
-
+import Math.sqrt
 
 object ksvd{
 
@@ -165,35 +164,8 @@ object ksvd{
     mat
   }
 
-  def SparseCoding_OMP(rows: RDD[Vector], D: BDM[Double], L:Int): (Matrix, Matrix) ={
-    var m=D.rows
-    var n=D.cols
-    var matrix=new RowMatrix(rows)
-    var Y=RowMatrixtoBreeze(matrix)
-    var newX=BDM.zeros[Double](n,n)
-    var residue=Y
 
-    for(i<- 0 until L){
-      var dot_p=D.t*residue
-      for(i<-0 until n){
-         for(j<-0 until n){
-            dot_p(i,j)=Math.abs(dot_p(i,j))
-         }
-      }
-      var newD=BDM.zeros[Double](m,n)
-      var index=dot_p.argmax
-      var j=0;
-      index.productIterator.map(_.asInstanceOf[Int]).foreach{i=>
-        newD(::,j):=D(::,i)
-        j=j+1
-      }
-      newX=pinv(newD)*Y
-      residue=Y-newD*newX
-    }
-
-    (fromBreeze(D),fromBreeze(newX))
-  }
-
+  
 
   def spr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
     val n = v.size
@@ -342,7 +314,7 @@ object ksvd{
   }
 
 
-  def computeSVD(D:RowMatrix ,G: BDM[Double], k:Int):(Double, BDM[Double])={
+  def computeSVD(G: BDM[Double], k:Int):(Double, BDM[Double])={
      val tol = 1e-10
      val maxIter=math.max(300,k*3)
      val n=G.cols
@@ -389,29 +361,21 @@ object ksvd{
   
 
 
-  def computeSigmaAndV(D:RowMatrix, X: Matrix):RDD[(Long,(Double,BDM[Double]))] ={
-  	var DT=transposeRowMatrix(D)
-
-  	var Drow=D.numRows()
-  	var Dcol=D.numCols()
-  	// var Dcol=getNthcols(DwithIndex)
-  	var Xarray=DT.rows.zipWithIndex.map{case (rows, rowIndex)=>
-  			(rowIndex,X.toArray.zipWithIndex.filter{case (value, index)=>
-		  		index%2==rowIndex
-		  	}.map(_._1))
-  		}  
-
-  	var E=DT.rows.zipWithIndex.map{case (rows, rowIndex)=> (rowIndex, rows.toArray)}.join(Xarray).map{case (index, (x,y))=>
-  			(index, Matrices.dense(Drow.toInt,Dcol.toInt,(BDV(x)*BDV(y).t).toArray))
-  		}
-  	var G=E.map{case (index, v)=> (index, toBreeze(computeGramian(v)))}
-  	var svd=G.map{case (i, grammian) => (i, computeSVD(D, grammian,1))}.map{case (i, (sigma, ufull))=> 
-        (i, (sigma,ufull(::,0).toDenseMatrix)) }
-    svd
+  def computeSigmaAndV(D:RowMatrix, X: RowMatrix):RDD[(Long,(Vector,(Double,BDM[Double])))] ={
+  var DT=transposeRowMatrix(D)
+  var Drow=D.numRows()
+  var Dcol=D.numCols()
+  // var Dcol=getNthcols(DwithIndex)
+  var Xarray=X.rows.zipWithIndex.map{case (rows, rowIndex)=>(rowIndex,rows)};
+  var DTindex=DT.rows.zipWithIndex.map{case (rows, rowIndex)=> (rowIndex, rows)}
+  var E=DTindex.join(Xarray).map{case (index, (x,y))=>(index,fromBreeze(toBreezeV(x)*toBreezeV(y).t))}
+  var G=E.map{case (index, v)=> (index, toBreeze(computeGramian(v)))}
+  var svd=DTindex.join(G).map{case (i, (d, grammian)) => (i, (d, computeSVD(grammian,1)))}
+  svd
   }
 
 
-  def updateX(svd:RDD[(Long, (Double, BDM[Double]))], X:Matrix):Matrix={
+  def updateX (svd:RDD[(Long, (Double, BDM[Double]))], X:Matrix): Matrix={
      var cols=X.numCols
      var BDM_X=svd.sortByKey().map{ x=> x._2._1*x._2._2.t}.reduce((x,y)=>BDM.vertcat(x.reshape(1,cols),y.reshape(1,cols)))
      fromBreeze(BDM_X)
@@ -420,32 +384,170 @@ object ksvd{
 
 
 
-  def computeU(sc:SparkContext, E:RDD[(Long,Matrix)], vd:RDD[(Long,(Double,BDM[Double]))]):BDM[Double]={
-    var E_v=E.join(vd).map{case (index, (e,(sigma, v))) =>
-      (index, toBreeze(e), v) 
-      }.map{case (index, e, v)=> (index,e*v.t)}.sortByKey().map(_._2)
-    var D=E_v.reduce((x,y)=>BDM.horzcat(x,y))
+  def computeU(E:RDD[(Long,Matrix)], vd:RDD[(Long,(Vector, (Double,BDM[Double])))]):BDM[Double]={
+    var rows=E.take(1)(0)._2.numRows
+    var cols=E.count.toInt
+    var D=BDM.zeros[Double](rows,cols)
+    var E_v=E.join(vd).map{case (index, (e, (d, (sigma, v)))) =>
+      (index, d, toBreeze(e)*v.t/sigma)
+    }.map{ case (index, d, v) => 
+      if(d(0)*v(0,0)< 0){
+        (index, -v)
+      }
+      else{
+        (index, v)
+      }
+    }
+    E_v.collect().foreach(x=> D(::,x._1.toInt):=x._2.toDenseVector)
     D
   }
 
   
-  def computeErr(D:RowMatrix, X: Matrix):RDD[(Long,Matrix)]={
+  def computeErr(D:RowMatrix, X: RowMatrix):RDD[(Long,Matrix)]={
     var DT=transposeRowMatrix(D)
 
     var Drow=D.numRows()
     var Dcol=D.numCols()
     // var Dcol=getNthcols(DwithIndex)
-    var Xarray=DT.rows.zipWithIndex.map{case (rows, rowIndex)=>
-        (rowIndex,X.toArray.zipWithIndex.filter{case (value, index)=>
-          index%2==rowIndex
-        }.map(_._1))
-      }  
-
-    var E=DT.rows.zipWithIndex.map{case (rows, rowIndex)=> (rowIndex, rows.toArray)}.join(Xarray).map{case (index, (x,y))=>
-        (index, Matrices.dense(Drow.toInt,Dcol.toInt,(BDV(x)*BDV(y).t).toArray))
-      }.sortByKey()
+    var Xarray=X.rows.zipWithIndex.map{case (rows, rowIndex)=>(rowIndex,rows)};
+    var E=DT.rows.zipWithIndex.map{case (rows, rowIndex)=> (rowIndex, rows)}.join(Xarray).map{case (index, (x,y))=>
+        (index,fromBreeze(toBreezeV(x)*toBreezeV(y).t))
+      }    
     E
   }
+
+
+  def SparseCoding_BMP(A: RowMatrix, D: BDM[Double], L:Int): (Matrix,Matrix) ={
+    var rows=A.rows
+
+    var m=D.cols
+    var n=A.numCols().toInt //for X matrix
+
+    var matrix=new RowMatrix(rows)
+    var Y=RowMatrixtoBreeze(matrix)
+    var X=BDM.zeros[Double](m,n)
+    var residue=Y
+
+    for(i<- 0 until L){
+      for(j<- 0 until residue.cols ){
+        var r=residue(::,j)
+        var index=0
+        var maxValue=Double.NegativeInfinity
+        for(k<- 0 until D.cols){
+            var d=D(::,k)
+            if(Math.abs(d.t*r)>maxValue){
+              maxValue=Math.abs(d.t*r)
+              index=k;
+            }
+        }
+        var value=D(::,index).t*r
+        X(index,j)=X(index,j)+value
+        residue(::,j):=residue(::,j)-value*D(::,index)   
+      }
+    }
+    (fromBreeze(D), fromBreeze(X))
+  }
+
+  def SparseCoding_OMP(A: RowMatrix, D: BDM[Double], tol:Double): (Matrix,Matrix) ={
+    var rows=A.rows
+    var m=D.cols
+    var Dl=BDM.zeros[Double](D.rows,m)
+    var n=A.numCols().toInt //for X matrix
+    var matrix=new RowMatrix(rows)
+    var Y=RowMatrixtoBreeze(matrix)
+    var a=BDM.zeros[Double](m,n)
+    var X=BDM.zeros[Double](m,n)
+    //initial selected_atom
+    var selected_atom:List[List[Int]]=List()
+    for(i<- 0 until n){
+      selected_atom=selected_atom:+List()
+    }
+    var residue=Y
+    var i=0
+
+    while(i< m){
+      var j=0
+      while (j< residue.cols && normMatrix(residue) > tol ){
+        var r=residue(::,j)
+        var index=0
+        var maxValue=Double.NegativeInfinity
+
+        for(k<- 0 until D.cols){
+            var d=D(::,k)
+            if(Math.abs(d.t*r)>maxValue){
+              maxValue=Math.abs(d.t*r)
+              index=k;
+            }
+        }
+
+        selected_atom=selected_atom.updated(j, selected_atom(j):+index)
+        Dl(::,i):=D(::,index)
+        a=pinv(Dl)*Y
+        residue=Y-Dl*a
+        j=j+1
+        print("residue is ")
+        println(normMatrix(residue))  
+      }
+      i=i+1
+
+      selected_atom.zipWithIndex.foreach{case (v1,i)=>
+        v1.zipWithIndex.foreach{case (v2, j)=>
+           X(v2,i)=a(j,i)
+        }
+      }
+
+    }
+    checkZero(D,X)
+}
+
+def checkZero(D:BDM[Double],X:BDM[Double]): (Matrix,Matrix)={
+  var m=D.cols
+  var n=X.cols
+
+  var checkZero=BDV.zeros[Double](n)
+    var checklist:List[Int]=List()
+    for(k<-0 until m){
+      if(X(k,::).t==checkZero){
+        checklist=checklist:+k
+      }
+    }
+    //use w remove 0
+    checklist=checklist.sortWith(_>_)
+    var len=checklist.length
+
+    if(len==0){
+      (fromBreeze(D),fromBreeze(X))
+
+    }
+    else{
+      var Ddata=D.data
+      var Xdata=X.data
+      // println(checklist)
+        checklist.foreach{i=>
+          Ddata=Ddata.zipWithIndex.filter(x=>x._2< i*D.rows || x._2 >=(i+1)*D.rows ).map(_._1)
+          Xdata=Xdata.zipWithIndex.filter(x=>x._2< i*X.cols || x._2 >=(i+1)*X.cols ).map(_._1)
+        }
+      (new DenseMatrix(D.rows,D.cols-len, Ddata), new DenseMatrix(X.rows-len, X.cols, Xdata) ) 
+    } 
+}
+
+def normMatrix(v:BDM[Double]):Double={
+  var num:Double=0;
+  for(i<-0 until v.rows){
+    for(j<- 0 until v.cols){
+      num=num+v(i,j)*v(i,j)
+    }
+  }
+  Math.sqrt(num)
+}
+
+def normalizedCol(v:BDM[Double]):BDM[Double]={
+  var mat=BDM.zeros[Double](v.rows,v.cols)
+  for(i<-0 until v.cols){
+    mat(::,i):=v(::,i)/norm(v(::,i))
+  }
+  mat
+}
 
 
 
@@ -457,39 +559,55 @@ object ksvd{
     var A=new RowMatrix(distFile)
 
     var n=A.rows.count.toInt
-    var k=2 // D is  n*k
-    var D=BDM.rand(n,k)
+    var k=n// D is  n*k
+
+    var D=normalizedCol(BDM.rand(n,k))
+
     //var qrResult=SparseCoding(distFile)
-    var L=2
-    var t=args(0).toInt
-    //L: number of non-zero entries in output
+    var tol:Double=1 // for sparse coding iteration
+
+    var t=args(0).toInt // for ksvd iteration
 
     for(i<- 0 until t){
-      var qrResult=SparseCoding_OMP(distFile,D,L)
-
+      var qrResult=SparseCoding_OMP(A,D,tol)
       var Drowmatrix=new RowMatrix(matrixToRDD(sc, qrResult._1))
-      var X=qrResult._2
+      var Xrowmatrix=new RowMatrix(matrixToRDD(sc, qrResult._2))
 
-      var vd=computeSigmaAndV(Drowmatrix,X)
+      println("After SparseCoding")
+      println("D: ")
+      println(toBreeze(qrResult._1))
+      println("X: ")
+      println(toBreeze(qrResult._2)) 
+      println("Y: ")
+      println(toBreeze(qrResult._1)*toBreeze(qrResult._2))
 
-      var E=computeErr(Drowmatrix,X)
-      D=computeU(sc, E, vd)
-      X=updateX(vd,X)
+      var vd=computeSigmaAndV(Drowmatrix,Xrowmatrix)
+      var E=computeErr(Drowmatrix,Xrowmatrix)
+      D=computeU(E, vd)
+
+      println("After Dictionary Update")
+      println("D:")
+      println(D)
+      println("X:")
+      println(toBreeze(qrResult._2))
+      println("Y:")
+      println(D*toBreeze(qrResult._2))
     }
+
     // var res=DicUpdate(D,X)
     // var DT=transposeRowMatrix(D)
     // DT.rows.foreach(println)
     // D.rows.foreach(println)
     // println(X)
     // res.rows.foreach(println)
-    println("D:")
-    D.rows.foreach(println)
-    println("X:")
-    println(X)
-    var Y=D.multiply(X)
-    println("Y:")
-    Y.rows.foreach(println)
-    
+    // var X_BDM=toBreeze(X)
+    // println("D:")
+    // println(D)
+    // println("X:")
+    // println(X_BDM)
+    // var Y=D*X_BDM
+    // println("Y:")
+    // println(Y)    
 
     
 
