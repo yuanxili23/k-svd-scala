@@ -361,14 +361,17 @@ object ksvd{
   
 
 
-  def computeSigmaAndV(D:RowMatrix, X: RowMatrix):RDD[(Long,(Vector,(Double,BDM[Double])))] ={
+  def computeSigmaAndV(Y:BDM[Double], D:RowMatrix, X: RowMatrix):RDD[(Long,(Vector,(Double,BDM[Double])))] ={
   var DT=transposeRowMatrix(D)
   var Drow=D.numRows()
   var Dcol=D.numCols()
   // var Dcol=getNthcols(DwithIndex)
   var Xarray=X.rows.zipWithIndex.map{case (rows, rowIndex)=>(rowIndex,rows)};
   var DTindex=DT.rows.zipWithIndex.map{case (rows, rowIndex)=> (rowIndex, rows)}
-  var E=DTindex.join(Xarray).map{case (index, (x,y))=>(index,fromBreeze(toBreezeV(x)*toBreezeV(y).t))}
+  var E_indiv=DTindex.join(Xarray).map{case (index, (x,y))=>(index,toBreezeV(x)*toBreezeV(y).t)}
+  var Eall=Y-E_indiv.map(_._2).reduce((x,y)=>x+y)
+  var E=E_indiv.map{case (index, v)=> (index, fromBreeze(Eall+v) ) }
+
   var G=E.map{case (index, v)=> (index, toBreeze(computeGramian(v)))}
   var svd=DTindex.join(G).map{case (i, (d, grammian)) => (i, (d, computeSVD(grammian,1)))}
   svd
@@ -403,16 +406,20 @@ object ksvd{
   }
 
   
-  def computeErr(D:RowMatrix, X: RowMatrix):RDD[(Long,Matrix)]={
+  def computeErr(Y:BDM[Double] ,D:RowMatrix, X: RowMatrix):RDD[(Long,Matrix)]={
     var DT=transposeRowMatrix(D)
 
     var Drow=D.numRows()
     var Dcol=D.numCols()
     // var Dcol=getNthcols(DwithIndex)
     var Xarray=X.rows.zipWithIndex.map{case (rows, rowIndex)=>(rowIndex,rows)};
-    var E=DT.rows.zipWithIndex.map{case (rows, rowIndex)=> (rowIndex, rows)}.join(Xarray).map{case (index, (x,y))=>
-        (index,fromBreeze(toBreezeV(x)*toBreezeV(y).t))
-      }    
+
+    var DTindex=DT.rows.zipWithIndex.map{case (rows, rowIndex)=> (rowIndex, rows)}
+
+    var E_indiv=DTindex.join(Xarray).map{case (index, (x,y))=>(index,toBreezeV(x)*toBreezeV(y).t)}
+    var Eall=Y-E_indiv.map(_._2).reduce((x,y)=>x+y)
+    var E=E_indiv.map{case (index, v)=> (index, fromBreeze(Eall+v) ) }
+
     E
   }
 
@@ -453,8 +460,8 @@ object ksvd{
     var m=D.cols
     var Dl=BDM.zeros[Double](D.rows,m)
     var n=A.numCols().toInt //for X matrix
-    var matrix=new RowMatrix(rows)
-    var Y=RowMatrixtoBreeze(matrix)
+    // var matrix=new RowMatrix(rows)
+    var Y=RowMatrixtoBreeze(A)
     var a=BDM.zeros[Double](m,n)
     var X=BDM.zeros[Double](m,n)
     //initial selected_atom
@@ -517,7 +524,6 @@ def checkZero(D:BDM[Double],X:BDM[Double]): (Matrix,Matrix)={
 
     if(len==0){
       (fromBreeze(D),fromBreeze(X))
-
     }
     else{
       var Ddata=D.data
@@ -557,6 +563,7 @@ def normalizedCol(v:BDM[Double]):BDM[Double]={
     val sc=new SparkContext(conf)
     val distFile=sc.textFile("/Users/Yuanxi/Desktop/distri-k-svd/signal.txt").map(line => readFile(line))
     var A=new RowMatrix(distFile)
+    var Y=RowMatrixtoBreeze(A) //BDM
 
     var n=A.rows.count.toInt
     var k=n// D is  n*k
@@ -581,8 +588,8 @@ def normalizedCol(v:BDM[Double]):BDM[Double]={
       println("Y: ")
       println(toBreeze(qrResult._1)*toBreeze(qrResult._2))
 
-      var vd=computeSigmaAndV(Drowmatrix,Xrowmatrix)
-      var E=computeErr(Drowmatrix,Xrowmatrix)
+      var vd=computeSigmaAndV(Y,Drowmatrix,Xrowmatrix)
+      var E=computeErr(Y,Drowmatrix,Xrowmatrix)
       D=computeU(E, vd)
 
       println("After Dictionary Update")
