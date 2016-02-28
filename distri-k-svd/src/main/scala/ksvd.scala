@@ -378,11 +378,11 @@ object ksvd{
   }
 
 
-  def updateX (svd:RDD[(Long, (Double, BDM[Double]))], X:Matrix): Matrix={
-     var cols=X.numCols
-     var BDM_X=svd.sortByKey().map{ x=> x._2._1*x._2._2.t}.reduce((x,y)=>BDM.vertcat(x.reshape(1,cols),y.reshape(1,cols)))
-     fromBreeze(BDM_X)
-  }
+  // def updateX (svd:RDD[(Long, (Double, BDM[Double]))], X:Matrix): Matrix={
+  //    var cols=X.numCols
+  //    var BDM_X=svd.sortByKey().map{ x=> x._2._1*x._2._2.t}.reduce((x,y)=>BDM.vertcat(x.reshape(1,cols),y.reshape(1,cols)))
+  //    fromBreeze(BDM_X)
+  // }
 
 
 
@@ -555,6 +555,31 @@ def normalizedCol(v:BDM[Double]):BDM[Double]={
   mat
 }
 
+def distributed(Y:BDM[Double] ,D:RowMatrix, X: RowMatrix, Q:RowMatrix, W: BDM[Double], iter:Int):BDM[Double]={
+   var Xrows=X.numRows.toInt
+   var Xcols=X.numCols.toInt
+   var E2=computeErr(Y,D,X).map{case (index, v) => (index, toBreeze(v)*toBreeze(v.transpose) ) }
+   var Qindex=Q.rows.zipWithIndex.map{case (row, index)=> (index, row) }
+   
+   var updatedD=BDM.zeros[Double](D.numRows.toInt, D.numCols.toInt)
+
+   for(m<- 0 until iter){
+     var Z=E2.join(Qindex).map{case (index, (v,q))=>(index, v*toBreezeV(q))}.map{case(index, z)=> (index, W*z)}
+
+     var V=Z.map{case (index,z)=> (index, z/W(0,index.toInt)) }
+     Qindex=V.map{case (index,v)=> 
+       var r=v.t*v
+       var q=v/r
+      (index, fromBreezeV(q))
+     }
+   }
+
+   Qindex.collect().foreach{case (index, v)=>
+      updatedD(::,index.toInt):=toBreezeV(v)
+   }
+
+   updatedD
+}
 
 
   def main(args: Array[String]) {
@@ -562,6 +587,7 @@ def normalizedCol(v:BDM[Double]):BDM[Double]={
     val conf=new SparkConf().setAppName("ksvd")
     val sc=new SparkContext(conf)
     val distFile=sc.textFile("/Users/Yuanxi/Desktop/distri-k-svd/signal.txt").map(line => readFile(line))
+    
     var A=new RowMatrix(distFile)
     var Y=RowMatrixtoBreeze(A) //BDM
 
@@ -575,30 +601,56 @@ def normalizedCol(v:BDM[Double]):BDM[Double]={
 
     var t=args(0).toInt // for ksvd iteration
 
+
+    var Xrows=n
+
+      //create weight matrix
+    var W=BDM.rand(Xrows,Xrows)
+      //initial Q
+    var Q=new RowMatrix(matrixToRDD(sc, fromBreeze(normalizedCol(BDM.rand(Xrows,Xrows)).t)))
+
+
     for(i<- 0 until t){
       var qrResult=SparseCoding_OMP(A,D,tol)
+
       var Drowmatrix=new RowMatrix(matrixToRDD(sc, qrResult._1))
       var Xrowmatrix=new RowMatrix(matrixToRDD(sc, qrResult._2))
 
+
+      
+ 
       println("After SparseCoding")
       println("D: ")
       println(toBreeze(qrResult._1))
       println("X: ")
-      println(toBreeze(qrResult._2)) 
+      println(toBreeze(qrResult._2))
       println("Y: ")
       println(toBreeze(qrResult._1)*toBreeze(qrResult._2))
 
+//method 1
       var vd=computeSigmaAndV(Y,Drowmatrix,Xrowmatrix)
       var E=computeErr(Y,Drowmatrix,Xrowmatrix)
       D=computeU(E, vd)
 
-      println("After Dictionary Update")
-      println("D:")
+      println("After DicUpdate")
+      println("D: ")
       println(D)
-      println("X:")
+      println("X: ")
       println(toBreeze(qrResult._2))
-      println("Y:")
+      println("Y: ")
       println(D*toBreeze(qrResult._2))
+//method2
+      // D=distributed(Y,Drowmatrix,Xrowmatrix,Q,W,3)
+
+      // println("After DicUpdate")
+      // println("D: ")
+      // println(D)
+      // println("X: ")
+      // println(toBreeze(qrResult._2))
+      // println("Y: ")
+      // println(D*toBreeze(qrResult._2))
+
+
     }
 
     // var res=DicUpdate(D,X)
