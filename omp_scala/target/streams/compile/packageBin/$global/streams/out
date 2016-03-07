@@ -1,0 +1,33 @@
+[0m[[0minfo[0m] [0mPackaging /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/omp_2.10-1.0.jar ...[0m
+[0m[[0mdebug[0m] [0mInput file mappings:[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$2.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$2.class[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$toBreeze$1.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$toBreeze$1.class[0m
+[0m[[0mdebug[0m] [0m	omp.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp.class[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$3$$anonfun$apply$2.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$3$$anonfun$apply$2.class[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$toBreezeDense$1.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$toBreezeDense$1.class[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$1.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$1.class[0m
+[0m[[0mdebug[0m] [0m	omp$.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$.class[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$OMP$2$$anonfun$apply$mcVI$sp$3.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$OMP$2$$anonfun$apply$mcVI$sp$3.class[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$OMP$3.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$OMP$3.class[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$2$$anonfun$apply$1.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$2$$anonfun$apply$1.class[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$OMP$2.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$OMP$2.class[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$OMP$1.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$OMP$1.class[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$3.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$3.class[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$toBreeze$1$$anonfun$apply$mcVI$sp$2.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$toBreeze$1$$anonfun$apply$mcVI$sp$2.class[0m
+[0m[[0mdebug[0m] [0m	omp$$anonfun$toBreezeDense$1$$anonfun$apply$mcVI$sp$1.class[0m
+[0m[[0mdebug[0m] [0m	  /Users/romi/Documents/cloud_fall15/omp/test_scala/target/scala-2.10/classes/omp$$anonfun$toBreezeDense$1$$anonfun$apply$mcVI$sp$1.class[0m
+[0m[[0minfo[0m] [0mDone packaging.[0m
