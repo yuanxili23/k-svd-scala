@@ -1,0 +1,4 @@
+[0m[[0minfo[0m] [0m:: delivering :: ksvd#ksvd_2.10;1.0 :: 1.0 :: release :: Fri Dec 04 15:56:52 EST 2015[0m
+[0m[[0mdebug[0m] [0m	options = status=release pubdate=Fri Dec 04 15:56:52 EST 2015 validate=true resolveDynamicRevisions=true merge=true resolveId=null pubBranch=null[0m
+[0m[[0minfo[0m] [0m	delivering ivy file to /Users/Yuanxi/Desktop/k-svd/target/scala-2.10/ivy-1.0.xml[0m
+[0m[[0mdebug[0m] [0m	deliver done (45ms)[0m
