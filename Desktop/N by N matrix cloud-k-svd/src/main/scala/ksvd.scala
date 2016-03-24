@@ -25,8 +25,7 @@ object ksvd{
     Vectors.dense(words)
   }
 
-
- def toBreeze(v:Matrix):BDM[Double]={
+  def toBreeze(v:Matrix):BDM[Double]={
     var m=v.numRows
     var n=v.numCols
     new BDM[Double](m,n,v.toArray)
@@ -111,14 +110,14 @@ def normalizedCol(v:BDM[Double]):BDM[Double]={
   mat
 }
 
-def checkZero(D:BDM[Double],X:BDM[Double]): (BDM[Double],BDM[Double])={
+def checkZero(D:BDM[Double]): BDM[Double]={
   var m=D.cols
-  var n=X.cols
+  var n=D.rows
 
   var checkZero=BDV.zeros[Double](n)
   var checklist:List[Int]=List()
     for(k<-0 until m){
-      if(X(k,::).t==checkZero){
+      if(D(::,k)==checkZero){
         checklist=checklist:+k
       }
     }
@@ -127,19 +126,9 @@ def checkZero(D:BDM[Double],X:BDM[Double]): (BDM[Double],BDM[Double])={
     var len=checklist.length
 
     if(len==0){
-      (D,X)
+      D
     }
     else{
-        var Xdata=BDM.zeros[Double](X.rows-len,X.cols)        
-        for(i<- 0 until X.cols){
-          var k=0
-          for(j<- 0 until X.rows){
-            if(!checklist.contains(j)){
-              Xdata(k,i)=X(j,i)
-              k=k+1
-            }
-          }
-        }
         var Ddata=BDM.zeros[Double](D.rows,D.cols-len)
         for(i<- 0 until D.rows){
           var k=0
@@ -150,21 +139,16 @@ def checkZero(D:BDM[Double],X:BDM[Double]): (BDM[Double],BDM[Double])={
             }
           }
         }
-      (Ddata, Xdata ) 
+      Ddata
     } 
 }
 
-  def SparseCoding_OMP(A: RowMatrix, D: BDM[Double], tol:Double): (BDM[Double],BDM[Double]) ={
-    var rows=A.rows
+
+def SparseCoding(Y:BDM[Double], D:BDM[Double], tol:Double):BDM[Double]={
+    var n=Y.cols //for X matrix
     var m=D.cols
-    
-    var n=A.numCols().toInt //for X matrix
-    // var matrix=new RowMatrix(rows)
-    var Y=RowMatrixtoBreeze(A)
     var a:BDM[Double]=null
-    var X=BDM.zeros[Double](m,n)
-    //initial selected_atom
-    var residue=Y
+    var X=BDM.zeros[Double](m,1)
     var j=0
     while(j< n){
       var i=0
@@ -176,7 +160,6 @@ def checkZero(D:BDM[Double],X:BDM[Double]): (BDM[Double],BDM[Double])={
           var r=residue(::,j)
           var index=0
           var maxValue=Double.NegativeInfinity
-
           for(k<- 0 until D.cols){
               var d=D(::,k)
               if(Math.abs(d.t*r)>maxValue){
@@ -186,26 +169,47 @@ def checkZero(D:BDM[Double],X:BDM[Double]): (BDM[Double],BDM[Double])={
           }
           selected_atom=selected_atom:+index
           Dl(::,i):=D(::,index)
-
           a=pinv(Dl)*Y
-
           residue=Y-Dl*a
-          
-          print("residue is ")
           norm_R=normMatrix(residue)
-          println(norm_R)
-          
           i=i+1         
       }
 
       selected_atom.zipWithIndex.foreach{case (v,k)=>
             X(v,j)=a(k,j)
       }
-      
-
       j=j+1
     }
-    checkZero(D,X)
+    X
+}
+
+
+
+def SparseCoding_OMP(AT: RowMatrix, D: BDM[Double], tol:Double):(BDM[Double],RowMatrix)={
+    var n=D.cols
+    var Xrows=AT.rows.zipWithIndex.map{case (a, index)=>
+      var a_dm=toBreezeV(a).toDenseMatrix.t
+      (index,SparseCoding(a_dm,D,tol))
+    }
+
+    var vector=Xrows.sortByKey().map(_._2.toDenseVector).map(x=>fromBreezeV(x))
+    var Xcols_D=transposeRowMatrix(new RowMatrix(vector)).rows.zipWithIndex.filter{case (v,index)=>
+      var dm_v=toBreezeV(v)
+      var zeros=BDV.zeros[Double](dm_v.size)
+      dm_v!=zeros
+    }.map{case (v, index)=> 
+      var newD=BDM.zeros[Double](D.rows,D.cols)
+      newD(::,index.toInt):=D(::,index.toInt)
+      (index,newD,v)
+    }
+    var Xcols=Xcols_D.map{case (index, d, v)=>
+      (index,v)
+    }.sortByKey().map(_._2)
+
+    var Xrowmatrix=transposeRowMatrix(new RowMatrix(Xcols))
+
+    var newD=Xcols_D.map{case (index, d, v)=>d}.reduce((x,y)=>x+y)
+    (checkZero(newD),Xrowmatrix)
 }
 
 
@@ -348,9 +352,8 @@ def cloud(Y:RowMatrix, D:BDM[Double], X: RowMatrix, Wt:BDM[Double] ,iterP:Int, i
     
 
     var A=new RowMatrix(distFile)
-    var Y=RowMatrixtoBreeze(A) //BDM
-
     var AT=transposeRowMatrix(A)
+
     var n=AT.rows.count.toInt // A is Y, which is k*n
     var k=A.rows.count.toInt// D is  k*k
     // var W=GenW(n)
@@ -372,27 +375,26 @@ def cloud(Y:RowMatrix, D:BDM[Double], X: RowMatrix, Wt:BDM[Double] ,iterP:Int, i
     var c=args(2).toInt // for consensus averaging iteration
     var tol=args(3).toDouble
 
+    var XT:RowMatrix=null
     var X:BDM[Double]=null
+    var resD:BDM[Double]=null
 
     for(i<- 0 until t){
-      var qrResult=SparseCoding_OMP(A,D,tol)
-      D=qrResult._1
-      
-      X=qrResult._2
+      var D_X=SparseCoding_OMP(AT,D,tol)
+      D=D_X._1
+      resD=D
 
+      XT=D_X._2
       
  
       println("After SparseCoding")
       println("D: ")
       println(D)
       println("X: ")
+      X=RowMatrixtoBreeze(XT).t
       println(X)
       println("Y: ")
       println(D*X)
-
-
-//cloud method
-      var XT=new RowMatrix(matrixToRDD(sc, fromBreeze(X.t)))
 
       D=cloud(AT,D,XT,W,p,c)
 
@@ -404,13 +406,16 @@ def cloud(Y:RowMatrix, D:BDM[Double], X: RowMatrix, Wt:BDM[Double] ,iterP:Int, i
       println("Y: ")
       println(D*X)
     }
+
     val time_e:Double=System.nanoTime()
     println("Running time is:")
     println((time_e-time_s)/1000000000+"s\n")
 
-    var resY=D*X
+    
 
     println("Error rate:")
+    var resY=resD*X
+    var Y=RowMatrixtoBreeze(A) //BDM
     println(normMatrix(resY-Y)/normMatrix(Y))
 
     sc.stop()
